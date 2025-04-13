@@ -1,0 +1,19 @@
+# Core Data Handling & Numerical Operations
+pandas>=1.3.0
+numpy>=1.20.0
+
+# Machine Learning & Preprocessing
+scikit-learn>=1.0.0
+joblib>=1.0.0         # For saving/loading models and preprocessors
+
+# User Interface (Dashboard)
+streamlit>=1.10.0
+# matplotlib>=3.4.0   # Optional: Uncomment if using plots in the Streamlit dashboard
+
+# Testing Framework (Development Dependency)
+pytest>=6.0.0
+# pytest-order>=1.0.0 # Optional: Uncomment if using @pytest.mark.order in tests
+
+# Add other specific libraries if you incorporated them, e.g.:
+# xgboost>=1.5.0      # If you used XGBoost model
+# lightgbm>=3.0.0     # If you used LightGBM model
