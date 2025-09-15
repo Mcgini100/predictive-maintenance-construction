@@ -1,4 +1,4 @@
-# Predictive Maintenance for Construction Equipment (University Project)
+# Predictive Maintenance for Construction Equipment 
 
 ## 1. Introduction
 
