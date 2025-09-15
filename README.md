@@ -141,7 +141,5 @@ Its there its the project itself, open it dzemit!!
 
 ## 11. License
 
-*(You should add a LICENSE file, e.g., MIT License)*
-This project is licensed under the terms of the [Your License Name] license. See the LICENSE file for details.
+Free, will add apache 2.0 
 
-## not sure ndaverenga zvese izvo but kana pasina zvekurunner shandisa zavndatumira pa whatsapp
