@@ -12,15 +12,17 @@ from src.modeling.utils import load_object
 from typing import Union
 
 # Global variable to hold the loaded model (lazy loading)
-_model = None
+_model_cache = {}
 
 def load_prediction_model(model_path: str = config.FINAL_MODEL_FILE):
-    """Loads the trained model globally for prediction."""
-    global _model
-    if _model is None:
+    """Loads the trained model for prediction, cached per file path and
+    modification time (so a retrained model file is picked up)."""
+    path = Path(model_path)
+    key = (str(path.resolve()), path.stat().st_mtime if path.exists() else None)
+    if key not in _model_cache:
         print("Loading prediction model...")
-        _model = load_object(Path(model_path))
-    return _model
+        _model_cache[key] = load_object(Path(model_path))
+    return _model_cache[key]
 
 def make_prediction(input_data: Union[pd.DataFrame, np.ndarray],
                     model_path: str = config.FINAL_MODEL_FILE) -> np.ndarray:

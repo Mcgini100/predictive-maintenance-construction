@@ -25,22 +25,25 @@ PREPROCESSOR_PATH = config.MODEL_SAVE_DIR / "preprocessor.joblib"
 MODEL_PATH = config.MODEL_SAVE_DIR / config.FINAL_MODEL_FILE.name
 
 # --- Load Artifacts ---
-# Load preprocessor and model once when the module is potentially imported or pipeline runs
-try:
-    print("Loading prediction artifacts...")
-    preprocessor = load_object(PREPROCESSOR_PATH)
-    # Model loading is handled lazily inside make_prediction/make_prediction_proba
-    # model = load_object(MODEL_PATH) # Can optionally load it here too
-    print("Prediction artifacts loaded (preprocessor). Model will be loaded on first prediction.")
-except FileNotFoundError as e:
-    print(f"Error: Required artifact not found: {e}")
-    print("Please ensure the training pipeline has been run successfully.")
-    preprocessor = None
-    # model = None
-except Exception as e:
-    print(f"Error loading prediction artifacts: {e}")
-    preprocessor = None
-    # model = None
+# The preprocessor is loaded lazily (on first prediction) instead of at import
+# time, so importing this module never fails and tests can point the paths at
+# a temporary directory.
+preprocessor = None
+_preprocessor_loaded_from = None
+
+
+def get_preprocessor():
+    """Loads (and caches) the fitted preprocessor from PREPROCESSOR_PATH."""
+    global preprocessor, _preprocessor_loaded_from
+    if preprocessor is None or _preprocessor_loaded_from != PREPROCESSOR_PATH:
+        try:
+            preprocessor = load_object(PREPROCESSOR_PATH)
+            _preprocessor_loaded_from = PREPROCESSOR_PATH
+        except FileNotFoundError as e:
+            print(f"Error: Required artifact not found: {e}")
+            print("Please ensure the training pipeline has been run successfully.")
+            preprocessor = None
+    return preprocessor
 
 
 def run_prediction_pipeline(input_data: Union[pd.DataFrame, Dict, List[Dict]]) -> pd.DataFrame:
@@ -66,6 +69,7 @@ def run_prediction_pipeline(input_data: Union[pd.DataFrame, Dict, List[Dict]]) -
     """
     print("\n====== Starting Prediction Pipeline ======")
 
+    preprocessor = get_preprocessor()
     if preprocessor is None:
          raise ValueError("Preprocessor artifact could not be loaded. Cannot run prediction pipeline.")
     # Check for model availability will happen within make_prediction call
@@ -85,7 +89,11 @@ def run_prediction_pipeline(input_data: Union[pd.DataFrame, Dict, List[Dict]]) -
         raise TypeError("Input data must be a pandas DataFrame, a dictionary, or a list of dictionaries.")
 
     # Keep original columns for merging results later
-    original_input_df = raw_df.copy()
+    original_input_df = raw_df.copy().reset_index(drop=True)
+    # clean_data() sorts rows by equipment and time and may drop rows with bad
+    # timestamps, so track each row's original position to map results back.
+    raw_df = raw_df.reset_index(drop=True)
+    raw_df['_row_id'] = np.arange(len(raw_df))
 
     # 2. Clean Data
     # Apply the same cleaning steps used during training
@@ -141,7 +149,7 @@ def run_prediction_pipeline(input_data: Union[pd.DataFrame, Dict, List[Dict]]) -
         print("Warning: Could not definitively determine expected features from preprocessor. Assuming engineered_df has necessary columns.")
         # We need to be careful here. Assume the feature engineering step produces the correct columns.
         # Drop ID/Timestamp if they are still present and not part of 'expected_features'
-        cols_to_drop_pre_transform = [config.TIMESTAMP_COLUMN, config.EQUIPMENT_ID_COLUMN]
+        cols_to_drop_pre_transform = [config.TIMESTAMP_COLUMN, config.EQUIPMENT_ID_COLUMN, '_row_id']
         features_to_process = engineered_df.drop(columns=[col for col in cols_to_drop_pre_transform if col in engineered_df.columns], errors='ignore')
         print(f"Features prepared for preprocessing (fallback): {features_to_process.columns.tolist()}")
 
@@ -183,9 +191,13 @@ def run_prediction_pipeline(input_data: Union[pd.DataFrame, Dict, List[Dict]]) -
 
     # 7. Format and Return Results
     print("\nFormatting results...")
-    results_df = original_input_df.copy() # Start with original input
-    results_df['prediction'] = predictions
-    results_df['prediction_probability'] = failure_probability
+    results_df = original_input_df.copy() # Start with original input, original row order
+    row_ids = engineered_df['_row_id'].to_numpy()
+    pred_series = pd.Series(np.asarray(predictions), index=row_ids)
+    prob_series = pd.Series(np.broadcast_to(failure_probability, len(row_ids)), index=row_ids)
+    # Rows dropped during cleaning (e.g. unparseable timestamp) get NaN.
+    results_df['prediction'] = pred_series.reindex(results_df.index).to_numpy()
+    results_df['prediction_probability'] = prob_series.reindex(results_df.index).to_numpy()
 
     print("====== Prediction Pipeline Finished Successfully ======")
     return results_df
