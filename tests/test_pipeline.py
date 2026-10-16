@@ -20,51 +20,50 @@ from src import config
 from src.pipelines import training_pipeline, prediction_pipeline
 
 # --- Test Setup ---
-# Ensure necessary directories exist or are created by fixtures/pipelines
-config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-config.RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-config.PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-config.MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+# The pipelines read their file locations from src.config. Point every path
+# at a temporary directory so running the tests never overwrites the real
+# dataset in data/raw/ or the committed model artifacts in models/.
+@pytest.fixture(scope="module", autouse=True)
+def isolated_pipeline_paths(tmp_path_factory):
+    """Creates a dummy raw CSV in a temp dir and redirects all pipeline paths to it."""
+    tmp = tmp_path_factory.mktemp("pipeline")
+    raw_file = tmp / "raw" / "predictive_maintainance.csv"
+    model_dir = tmp / "models"
+    raw_file.parent.mkdir(parents=True)
+    model_dir.mkdir()
 
-# Create a dummy raw data file for testing pipelines
-@pytest.fixture(scope="module", autouse=True) # Autouse ensures it runs for all tests in module
-def create_dummy_raw_data_for_pipeline():
-    """Creates a dummy raw CSV file in the expected location for pipeline tests."""
+    rng = np.random.default_rng(42)
+    n = 50
     data = {
-        'Equipment_id': [f'EQ{i%5}' for i in range(50)], # 50 samples, 5 equipment IDs
-        'Timestamp': pd.to_datetime(pd.date_range(start='2024-01-01', periods=50, freq='H')),
-        'Engine_temp': np.random.uniform(400, 900, 50),
-        'oil_pressure': np.random.uniform(2.0, 5.0, 50),
-        'Hydraulic_pressure': np.random.uniform(290, 320, 50),
-        'Operating_hours': np.random.uniform(50, 2000, 50),
-        'Vibrations': np.random.uniform(20, 60, 50),
-        'Tool_wear': np.random.randint(0, 50, 50),
-        'Fuel_rate': np.random.uniform(5, 20, 50),
-        'Ambient_temp': np.random.uniform(290, 310, 50),
-        'Terrain_type': np.random.choice(['sandy', 'rocky', 'plain', 'mixed'], 50),
-        'Failure_event': np.random.randint(0, 2, 50) # Random target
+        'Equipment_id': [f'EQ{i%5}' for i in range(n)], # 50 samples, 5 equipment IDs
+        'Timestamp': pd.date_range(start='2024-01-01', periods=n, freq='h'),
+        'Engine_temp': rng.uniform(400, 900, n),
+        'oil_pressure': rng.uniform(2.0, 5.0, n),
+        'Hydraulic_pressure': rng.uniform(290, 320, n),
+        'Operating_hours': rng.uniform(50, 2000, n),
+        'Vibrations': rng.uniform(20, 60, n),
+        'Tool_wear': rng.integers(0, 50, n),
+        'Fuel_rate': rng.uniform(5, 20, n),
+        'Ambient_temp': rng.uniform(290, 310, n),
+        'Terrain_type': rng.choice(['sandy', 'rocky', 'plain', 'mixed'], n),
+        'Failure_event': np.tile([0, 1], n // 2), # balanced target so stratified split works
     }
-    df = pd.DataFrame(data)
-    df.to_csv(config.RAW_DATA_FILE, index=False)
-    print(f"Dummy raw data created at {config.RAW_DATA_FILE}")
+    pd.DataFrame(data).to_csv(raw_file, index=False)
 
-    yield # Allow tests to run
-
-    # Teardown: Clean up created files (optional, pytest handles tmp dirs well)
-    # print("Cleaning up pipeline test artifacts...")
-    # if config.RAW_DATA_FILE.exists(): os.remove(config.RAW_DATA_FILE)
-    # if config.PROCESSED_DATA_FILE.exists(): os.remove(config.PROCESSED_DATA_FILE)
-    # preprocessor_file = config.MODEL_SAVE_DIR / "preprocessor.joblib"
-    # model_file = config.MODEL_SAVE_DIR / config.FINAL_MODEL_FILE.name
-    # if preprocessor_file.exists(): os.remove(preprocessor_file)
-    # if model_file.exists(): os.remove(model_file)
+    mp = pytest.MonkeyPatch()
+    mp.setattr(config, "RAW_DATA_FILE", raw_file)
+    mp.setattr(config, "MODEL_SAVE_DIR", model_dir)
+    mp.setattr(config, "FINAL_MODEL_FILE", model_dir / config.FINAL_MODEL_FILE.name)
+    mp.setattr(prediction_pipeline, "PREPROCESSOR_PATH", model_dir / "preprocessor.joblib")
+    mp.setattr(prediction_pipeline, "MODEL_PATH", model_dir / config.FINAL_MODEL_FILE.name)
+    mp.setattr(prediction_pipeline, "preprocessor", None)
+    yield
+    mp.undo()
 
 
 # --- Test Functions ---
 
-# Use 'order' marker if sequential execution is critical (training before prediction)
-# Requires pytest-order: pip install pytest-order
-@pytest.mark.order(1)
+# pytest runs tests in file order, so training runs before the prediction tests.
 def test_training_pipeline_runs():
     """Tests if the training pipeline runs end-to-end without critical errors."""
     try:
@@ -75,7 +74,6 @@ def test_training_pipeline_runs():
     except Exception as e:
         pytest.fail(f"Training pipeline failed with an exception: {e}")
 
-@pytest.mark.order(2)
 def test_prediction_pipeline_runs_dataframe():
     """Tests if the prediction pipeline runs with DataFrame input."""
     # Need some raw input data (without target)
@@ -95,7 +93,6 @@ def test_prediction_pipeline_runs_dataframe():
     except Exception as e:
         pytest.fail(f"Prediction pipeline failed with DataFrame input: {e}")
 
-@pytest.mark.order(3)
 def test_prediction_pipeline_runs_dict():
     """Tests if the prediction pipeline runs with dictionary input."""
     # Create a sample dictionary
@@ -113,3 +110,18 @@ def test_prediction_pipeline_runs_dict():
          pytest.fail("Prediction pipeline failed: Model or preprocessor artifacts not found.")
     except Exception as e:
         pytest.fail(f"Prediction pipeline failed with dictionary input: {e}")
+
+def test_prediction_pipeline_keeps_input_row_order():
+    """clean_data() sorts by equipment/time; results must still line up with the input rows."""
+    input_df = pd.read_csv(config.RAW_DATA_FILE).head(10).drop(columns=[config.TARGET_COLUMN])
+    shuffled = input_df.sample(frac=1, random_state=0).reset_index(drop=True)
+    results_df = prediction_pipeline.run_prediction_pipeline(shuffled)
+    # Input columns are returned unchanged and in the caller's order.
+    pd.testing.assert_series_equal(results_df['Equipment_id'], shuffled['Equipment_id'])
+    pd.testing.assert_series_equal(results_df['Engine_temp'], shuffled['Engine_temp'])
+    # Same rows, different input order -> same prediction per row.
+    ordered = prediction_pipeline.run_prediction_pipeline(input_df)
+    key = ['Equipment_id', 'Timestamp']
+    a = results_df.sort_values(key).reset_index(drop=True)['prediction_probability']
+    b = ordered.sort_values(key).reset_index(drop=True)['prediction_probability']
+    np.testing.assert_allclose(a.to_numpy(dtype=float), b.to_numpy(dtype=float))
