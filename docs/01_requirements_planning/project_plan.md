@@ -81,7 +81,6 @@ This document outlines the high-level plan for the development of the predictive
 
 ## 3. Timeline
 
-*   A detailed timeline will be tracked using a Gantt chart or similar project management tool. [Placeholder: Link to Gantt chart if applicable]
 *   **Estimated Duration per Phase (Example for University Semester):**
     *   Phase 1: 1 Week
     *   Phase 2: 1 Week
@@ -92,13 +91,12 @@ This document outlines the high-level plan for the development of the predictive
     *   Phase 7: 1 Week
     *   Phase 8: 2-3 Weeks (Concurrent with reporting)
     *   Phase 9: (Covered within Final Report/Phase 8)
-*   **Total Estimated Duration:** [Placeholder: e.g., 12-16 Weeks]
+*   **Total Estimated Duration:** 12-17 weeks (sum of the phase estimates above)
 
 ## 4. Resource Allocation
 
 *   **Personnel:**
-    *   Primary Researcher/Developer: [Your Name/Student ID]
-    *   Project Supervisor/Advisor: [Supervisor's Name]
+    *   Developer: Musawenkosi Mpofu
 *   **Computing Resources:**
     *   Development Laptop/PC with sufficient RAM/CPU.
     *   Python environment (Anaconda recommended).
