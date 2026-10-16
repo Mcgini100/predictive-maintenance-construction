@@ -88,11 +88,14 @@ def create_rolling_features(df: pd.DataFrame,
 
         # Fill NaNs created by shift/rolling (especially at the beginning of each group)
         # Option 1: Backfill first, then fill remaining with global mean/median or original value
-        df_eng[roll_mean_col].fillna(method='bfill', inplace=True) # Backfill within groups
-        df_eng[roll_std_col].fillna(method='bfill', inplace=True)
-        # Fill any remaining NaNs (e.g., if a group has < window points) - use original value as approximation
-        df_eng[roll_mean_col].fillna(df_eng[col], inplace=True)
-        df_eng[roll_std_col].fillna(0, inplace=True) # Std dev can be 0 if constant
+        # Backfill *within each equipment group* so one machine's values never
+        # leak into another machine's first rows. (fillna(method=...) was
+        # removed in pandas 3, so use the groupby .bfill() accessor instead.)
+        df_eng[roll_mean_col] = df_eng.groupby(group_col)[roll_mean_col].bfill()
+        df_eng[roll_std_col] = df_eng.groupby(group_col)[roll_std_col].bfill()
+        # Fill any remaining NaNs (e.g., a group with a single row) - use original value as approximation
+        df_eng[roll_mean_col] = df_eng[roll_mean_col].fillna(df_eng[col])
+        df_eng[roll_std_col] = df_eng[roll_std_col].fillna(0)  # Std dev can be 0 if constant
 
     print("Rolling feature creation finished.")
     return df_eng
