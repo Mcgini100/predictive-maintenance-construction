@@ -1,4 +1,6 @@
-# Predictive Maintenance for Construction Equipment 
+# Predictive Maintenance for Construction Equipment
+
+[![tests](https://github.com/Mcgini100/predictive-maintenance-construction/actions/workflows/tests.yml/badge.svg)](https://github.com/Mcgini100/predictive-maintenance-construction/actions/workflows/tests.yml)
 
 ## 1. Introduction
 
@@ -38,14 +40,39 @@ Construction operations frequently suffer from:
 *   **Testing:** Includes unit and integration tests (`tests/`) using `pytest` to ensure code reliability.
 *   **Modularity:** Code is organized into logical modules (`data_processing`, `modeling`, `pipelines`).
 
-## 5. Project Structure
+## 5. Results
 
-Its there its the project itself, open it dzemit!!
+Random Forest on a stratified 80/20 split (2,000 test rows), from `python -m src.pipelines.training_pipeline`:
+
+| Accuracy | Precision | Recall (failure) | F1 | ROC-AUC | Majority-class baseline |
+|---|---|---|---|---|---|
+| 0.64 | 0.68 | 0.80 | 0.74 | 0.67 | 0.63 |
+
+The model is only modestly better than always predicting "failure". The full evaluation, the dashboard alert
+analysis and the data limitations found (one reading per machine, so the rolling features carry no history) are in
+[`docs/04_reports/model_evaluation.md`](docs/04_reports/model_evaluation.md) and the executed notebook
+[`notebooks/eda_and_model_evaluation.ipynb`](notebooks/eda_and_model_evaluation.ipynb).
+
+## 6. Project Structure
+
+```
+app/dashboard.py              Streamlit dashboard (manual input, CSV upload, alerts)
+data/raw/                     Raw CSV used for training
+docs/                         Planning, architecture, data dictionary, evaluation report
+models/                       Saved preprocessor and Random Forest (joblib)
+notebooks/                    Executed EDA and model-evaluation notebook
+src/config.py                 Paths, column names, split settings
+src/data_processing/          Loading, cleaning, feature engineering
+src/modeling/                 Training, evaluation, prediction helpers
+src/pipelines/                End-to-end training and prediction pipelines
+tests/                        pytest unit and integration tests
+.github/workflows/tests.yml   CI: runs pytest on every push
+```
 
 
-## 6. Technology Stack
+## 7. Technology Stack
 
-*   **Language:** Python 3.8+
+*   **Language:** Python 3.10+ (CI runs 3.11)
 *   **Core Libraries:** Pandas, NumPy
 *   **Machine Learning:** Scikit-learn
 *   **Dashboard:** Streamlit
@@ -53,20 +80,19 @@ Its there its the project itself, open it dzemit!!
 *   **Testing:** Pytest
 *   **Environment Management:** Conda (Recommended) or venv
 
-## 7. Setup Instructions
+## 8. Setup Instructions
 
 **Prerequisites:**
-*   Python (3.8 or higher)
+*   Python 3.10 or higher
 *   Conda or `venv` installed
 
 **Steps:**
 
 1.  **Clone the Repository (or Download Code):**
     ```bash
-    git clone <your-repository-url>
+    git clone https://github.com/Mcgini100/predictive-maintenance-construction.git
     cd predictive-maintenance-construction
     ```
-    (If downloaded, extract and navigate to the `predictive-maintenance-construction` directory)
 
 2.  **Create and Activate Virtual Environment:**
     *   **Using Conda:**
@@ -93,7 +119,7 @@ Its there its the project itself, open it dzemit!!
     *   Ensure your raw data file is named `predictive_maintainance.csv`.
     *   Place it inside the `data/raw/` directory. The final path should be `predictive-maintenance-construction/data/raw/predictive_maintainance.csv`.
 
-## 8. Usage Instructions
+## 9. Usage Instructions
 
 **Important:** Run all Python commands from the **project root directory** (`predictive-maintenance-construction/`).
 
@@ -121,15 +147,16 @@ Its there its the project itself, open it dzemit!!
         *   Use the sidebar to input data manually or upload a CSV (must match raw format, without the `Failure_event` column).
         *   View results and alerts directly in the dashboard.
 
-## 9. Running Tests
+## 10. Running Tests
 
 *   To verify the functionality of the code components:
     ```bash
     pytest
     ```
-    *(Ensure you have installed `pytest` via `requirements.txt`)*
+    *(Ensure you have installed `pytest` via `requirements.txt`.)* The pipeline tests write to a temporary
+    directory, so running them never overwrites `data/raw/` or the saved models.
 
-## 10. Future Work & Potential Improvements
+## 11. Future Work & Potential Improvements
 
 *   **Real-time Data:** Integrate with live IoT sensors using MQTT or Kafka.
 *   **Cloud Deployment:** Deploy pipelines and the dashboard to a cloud platform (AWS, Azure, GCP) for scalability.
@@ -139,7 +166,7 @@ Its there its the project itself, open it dzemit!!
 *   **CMMS Integration:** Connect predictive alerts to existing Computerized Maintenance Management Systems.
 *   **Hyperparameter Optimization:** Use more advanced techniques (e.g., Optuna, Hyperopt) for tuning.
 
-## 11. License
+## 12. License
 
-Free, will add apache 2.0 
+Apache License 2.0 is planned; a `LICENSE` file has not been added yet.
 
